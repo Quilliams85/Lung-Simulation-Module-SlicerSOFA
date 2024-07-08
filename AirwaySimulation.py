@@ -3,7 +3,7 @@ import os
 from typing import Annotated, Optional
 import qt
 import vtk
-from vtk.util.numpy_support import numpy_to_vtk
+from vtk.util.numpy_support import numpy_to_vtk #type: ignore
 import random
 import time
 import uuid
@@ -299,6 +299,13 @@ class AirwaySimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.initializeParameterNode()
         self.logic.getParameterNode().AddObserver(vtk.vtkCommand.ModifiedEvent, self.updateSimulationGUI)
 
+
+        #set up transformation
+        model = self.logic.getParameterNode().getModelPointsArray(self.logic.getParameterNode().modelNode)
+        nx, ny, nz, dim = np.array(model)
+        
+
+
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
         self.timer.stop()
@@ -437,6 +444,11 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         vtk_points1.SetData(points_vtk1)
         parameterNode.ribsModelNode.GetPolyData().SetPoints(vtk_points1)
 
+        transform = self.getTransformation(scaled_positions)
+
+        #pass back the transformation of points
+        #numpy_intial = vtk.util.numpy_support.vtk_to_numpy(self.initialgrid.GetPoints().GetData())
+
     def getParameterNode(self):
         return AirwaySimulationParameterNode(super().getParameterNode())
 
@@ -454,6 +466,10 @@ class AirwaySimulationLogic(SlicerSofaLogic):
 
     def getSimulationController(self):
         return self.simulationController
+    
+    def getTransformation(self, currentgrid):
+        init_points = np.array(self.initialgrid)
+        return currentgrid - init_points
 
     def startSimulation(self) -> None:
         sequenceNode = self.getParameterNode().sequenceNode
@@ -715,7 +731,7 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         breathforce = parameterNode.breathingForce / 1000
 
         femNode.addObject('SurfacePressureForceField', pressure=breathforce, pulseMode=True, pressureSpeed=breathspeed)
-        #femNode.addObject('RestShapeSpringsForceField')
+        femNode.addObject('RestShapeSpringsForceField', stiffness=0.5, angularStiffness=1e-08)
         #femNode.addObject(RestoreForceField(ks=20, kd=100))
 
         fixedROI = femNode.addChild('FixedROI')

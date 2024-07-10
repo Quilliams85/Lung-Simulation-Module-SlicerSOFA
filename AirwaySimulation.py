@@ -34,6 +34,7 @@ from slicer import vtkMRMLMarkupsROINode
 from slicer import vtkMRMLModelNode
 from slicer import vtkMRMLSequenceBrowserNode
 from slicer import vtkMRMLSequenceNode
+from slicer import vtkMRMLBSplineTransformNode
 
 
 
@@ -130,6 +131,7 @@ class AirwaySimulationParameterNode:
     #Simulation data
     modelNode: vtkMRMLModelNode
     ribsModelNode: vtkMRMLModelNode
+    transformationNode: vtkMRMLBSplineTransformNode
     boundaryROI: vtkMRMLMarkupsROINode
     gravityVector: vtkMRMLMarkupsLineNode
     gravityMagnitude: int
@@ -300,11 +302,6 @@ class AirwaySimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.logic.getParameterNode().AddObserver(vtk.vtkCommand.ModifiedEvent, self.updateSimulationGUI)
 
 
-        #set up transformation
-        model = self.logic.getParameterNode().getModelPointsArray(self.logic.getParameterNode().modelNode)
-        nx, ny, nz, dim = np.array(model)
-        
-
 
     def cleanup(self) -> None:
         """Called when the application closes and the module widget is destroyed."""
@@ -445,9 +442,9 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         parameterNode.ribsModelNode.GetPolyData().SetPoints(vtk_points1)
 
         transform = self.getTransformation(scaled_positions)
-
-        #pass back the transformation of points
-        #numpy_intial = vtk.util.numpy_support.vtk_to_numpy(self.initialgrid.GetPoints().GetData())
+        print(self.numpy_to_vtkImageData(transform))
+        #slicer.util.getNode("BSplineTransform").GetTransformToParent().SetCoefficientData(self.numpy_to_vtkImageData(transform))
+        parameterNode.transformationNode.GetTransformToParent().SetCoefficientData(self.numpy_to_vtkImageData(scaled_positions))
 
     def getParameterNode(self):
         return AirwaySimulationParameterNode(super().getParameterNode())
@@ -470,6 +467,36 @@ class AirwaySimulationLogic(SlicerSofaLogic):
     def getTransformation(self, currentgrid):
         init_points = np.array(self.initialgrid)
         return currentgrid - init_points
+    
+    def numpy_to_vtkImageData(self, np_array):
+        # Ensure the numpy array is contiguous
+        np_array = np.ascontiguousarray(np_array)
+
+        # Create a vtkImageImport object
+        importer = vtk.vtkImageImport()
+
+        # Set the data attributes
+        importer.CopyImportVoidPointer(np_array, np_array.nbytes)
+        importer.SetDataScalarTypeToUnsignedChar()  # Use appropriate data type
+        importer.SetNumberOfScalarComponents(np_array.shape[2] if np_array.ndim == 3 else 1)
+
+        # Set the dimensions of the data
+        importer.SetDataExtent(0, np_array.shape[1] - 1, 0, np_array.shape[0] - 1, 0, 0)
+        importer.SetWholeExtent(0, np_array.shape[1] - 1, 0, np_array.shape[0] - 1, 0, 0)
+
+        # If the array has three dimensions (like for RGB images), adjust the Z extent
+        if np_array.ndim == 3:
+            importer.SetDataExtent(0, np_array.shape[1] - 1, 0, np_array.shape[0] - 1, 0, np_array.shape[2] - 1)
+            importer.SetWholeExtent(0, np_array.shape[1] - 1, 0, np_array.shape[0] - 1, 0, np_array.shape[2] - 1)
+
+        # Update the importer to generate the vtkImageData
+        importer.Update()
+
+        # Get the vtkImageData object
+        vtk_image_data = importer.GetOutput()
+
+        return vtk_image_data
+
 
     def startSimulation(self) -> None:
         sequenceNode = self.getParameterNode().sequenceNode
@@ -731,8 +758,7 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         breathforce = parameterNode.breathingForce / 1000
 
         femNode.addObject('SurfacePressureForceField', pressure=breathforce, pulseMode=True, pressureSpeed=breathspeed)
-        femNode.addObject('RestShapeSpringsForceField', stiffness=0.5, angularStiffness=1e-08)
-        #femNode.addObject(RestoreForceField(ks=20, kd=100))
+        femNode.addObject('RestShapeSpringsForceField', stiffness=1, angularStiffness=1e-08)
 
         fixedROI = femNode.addChild('FixedROI')
         self.BoxROI = fixedROI.addObject('BoxROI', template="Vec3", box=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], drawBoxes=False,

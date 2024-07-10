@@ -7,7 +7,7 @@ from vtk.util.numpy_support import numpy_to_vtk #type: ignore
 import random
 import time
 import uuid
-import numpy as np
+import numpy as np 
 
 
 # import Simulations.SOFASimulationMulti as multi
@@ -35,6 +35,7 @@ from slicer import vtkMRMLModelNode
 from slicer import vtkMRMLSequenceBrowserNode
 from slicer import vtkMRMLSequenceNode
 from slicer import vtkMRMLBSplineTransformNode
+#from slicer import vtkMRMLPlotDataNode
 
 
 
@@ -296,6 +297,33 @@ class AirwaySimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.addGravityVectorPushButton.connect("clicked()", self.logic.addGravityVector)
         self.ui.addRecordingSequencePushButton.connect("clicked()", self.logic.addRecordingSequence)
 
+
+        #setup chart
+
+        '''table = vtk.vtkTable()
+        arrX = vtk.vtkFloatArray()
+        arrX.SetName("X Axis")
+        table.AddColumn(arrX)
+
+        arrC = vtk.vtkFloatArray()
+        arrC.SetName("forceVal")
+        table.AddColumn(arrC)
+
+        TableNode = slicer.mrmlScene.AddNode(slicer.vtkMRMLTableNode())
+        TableNode.SetAndObserveTable(table)
+
+        plotDataNode = slicer.mrmlScene.AddNode(slicer.vtkMRMLPlotDataNode())
+        plotDataNode.SetName(arrC.GetName())
+        plotDataNode.SetAndObserveTableNodeID(TableNode.GetID())
+        plotDataNode.SetXColumnName(TableNode.GetColumnName(0))
+        plotDataNode.SetYColumnName(TableNode.GetColumnName(1))
+        
+        plotChartNode = self.ui.forcePlotChart
+
+        plotChartNode.AddAndObservePlotDataNodeID(plotDataNode.GetID());'''
+
+
+
         self.logic.getParameterNode().conversionFactor = 1
 
         self.initializeParameterNode()
@@ -387,6 +415,7 @@ class AirwaySimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     def simulationStep(self):
        self.logic.simulationStep(self.parameterNode)
        self.ui.currentStepSpinBox.value += 1
+       self.ui.systemForceBar.value = self.logic.systemForce
 
 
 #
@@ -420,6 +449,7 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         self.boxROI = None
         self.mouseInteractor = None
         self.startup = True
+        self.systemForce = 0
 
     def updateSofa(self, parameterNode) -> None:
         if parameterNode is not None:
@@ -441,10 +471,13 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         vtk_points1.SetData(points_vtk1)
         parameterNode.ribsModelNode.GetPolyData().SetPoints(vtk_points1)
 
-        transform = self.getTransformation(scaled_positions)
-        print(self.numpy_to_vtkImageData(transform))
+
+        self.systemForce = np.linalg.norm(self.femMechanicalObject.force.value)
+
+        #transform = self.getTransformation(scaled_positions)
+        #print(self.numpy_to_vtkImageData(transform))
         #slicer.util.getNode("BSplineTransform").GetTransformToParent().SetCoefficientData(self.numpy_to_vtkImageData(transform))
-        parameterNode.transformationNode.GetTransformToParent().SetCoefficientData(self.numpy_to_vtkImageData(scaled_positions))
+        #parameterNode.transformationNode.GetTransformToParent().SetCoefficientData(self.numpy_to_vtkImageData(scaled_positions))
 
     def getParameterNode(self):
         return AirwaySimulationParameterNode(super().getParameterNode())
@@ -516,6 +549,8 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         if self.startup:
             self.startup = False
             self.initialgrid = self.getParameterNode().getModelPointsArray(self.getParameterNode().modelNode)
+
+        
 
 
         super().startSimulation(self.getParameterNode())
@@ -750,14 +785,14 @@ class AirwaySimulationLogic(SlicerSofaLogic):
 
 
         femNode.addObject('TetrahedronSetTopologyModifier', name="Modifier")
-        femNode.addObject('MechanicalObject', name="mstate", template="Vec3d")
+        self.femMechanicalObject = femNode.addObject('MechanicalObject', name="mstate", template="Vec3d")
         femNode.addObject('TetrahedronFEMForceField', name="FEM", youngModulus=parameterNode.youngsModulus, poissonRatio=parameterNode.poissonRatio, method="large")
         femNode.addObject('MeshMatrixMass', totalMass=1)
 
         breathspeed = parameterNode.breathingPeriod / 100
         breathforce = parameterNode.breathingForce / 1000
 
-        femNode.addObject('SurfacePressureForceField', pressure=breathforce, pulseMode=True, pressureSpeed=breathspeed)
+        self.surfacePressure = femNode.addObject('SurfacePressureForceField', pressure=breathforce, pulseMode=True, pressureSpeed=breathspeed)
         femNode.addObject('RestShapeSpringsForceField', stiffness=1, angularStiffness=1e-08)
 
         fixedROI = femNode.addChild('FixedROI')

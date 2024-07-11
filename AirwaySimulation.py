@@ -34,7 +34,7 @@ from slicer import vtkMRMLMarkupsROINode
 from slicer import vtkMRMLModelNode
 from slicer import vtkMRMLSequenceBrowserNode
 from slicer import vtkMRMLSequenceNode
-from slicer import vtkMRMLBSplineTransformNode
+from slicer import vtkMRMLGridTransformNode
 #from slicer import vtkMRMLPlotDataNode
 
 
@@ -132,7 +132,7 @@ class AirwaySimulationParameterNode:
     #Simulation data
     modelNode: vtkMRMLModelNode
     ribsModelNode: vtkMRMLModelNode
-    transformationNode: vtkMRMLBSplineTransformNode
+    transformationNode: vtkMRMLGridTransformNode
     boundaryROI: vtkMRMLMarkupsROINode
     gravityVector: vtkMRMLMarkupsLineNode
     gravityMagnitude: int
@@ -169,6 +169,10 @@ class AirwaySimulationParameterNode:
         # Return the two opposing bounds corners
         # First corner: (minL, minP, minS), Second corner: (maxL, maxP, maxS)
         return [R_min, A_min, S_min, R_max, A_max, S_max]
+    
+    #grid transform update function
+    
+
 
     def getGravityVector(self):
 
@@ -298,32 +302,6 @@ class AirwaySimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.addRecordingSequencePushButton.connect("clicked()", self.logic.addRecordingSequence)
 
 
-        #setup chart
-
-        '''table = vtk.vtkTable()
-        arrX = vtk.vtkFloatArray()
-        arrX.SetName("X Axis")
-        table.AddColumn(arrX)
-
-        arrC = vtk.vtkFloatArray()
-        arrC.SetName("forceVal")
-        table.AddColumn(arrC)
-
-        TableNode = slicer.mrmlScene.AddNode(slicer.vtkMRMLTableNode())
-        TableNode.SetAndObserveTable(table)
-
-        plotDataNode = slicer.mrmlScene.AddNode(slicer.vtkMRMLPlotDataNode())
-        plotDataNode.SetName(arrC.GetName())
-        plotDataNode.SetAndObserveTableNodeID(TableNode.GetID())
-        plotDataNode.SetXColumnName(TableNode.GetColumnName(0))
-        plotDataNode.SetYColumnName(TableNode.GetColumnName(1))
-        
-        plotChartNode = self.ui.forcePlotChart
-
-        plotChartNode.AddAndObservePlotDataNodeID(plotDataNode.GetID());'''
-
-
-
         self.logic.getParameterNode().conversionFactor = 1
 
         self.initializeParameterNode()
@@ -450,6 +428,7 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         self.mouseInteractor = None
         self.startup = True
         self.systemForce = 0
+        self.probeDimension = 40
 
     def updateSofa(self, parameterNode) -> None:
         if parameterNode is not None:
@@ -474,10 +453,27 @@ class AirwaySimulationLogic(SlicerSofaLogic):
 
         self.systemForce = np.linalg.norm(self.femMechanicalObject.force.value)
 
-        #transform = self.getTransformation(scaled_positions)
-        #print(self.numpy_to_vtkImageData(transform))
-        #slicer.util.getNode("BSplineTransform").GetTransformToParent().SetCoefficientData(self.numpy_to_vtkImageData(transform))
-        #parameterNode.transformationNode.GetTransformToParent().SetCoefficientData(self.numpy_to_vtkImageData(scaled_positions))
+
+        #Update Grid Transform
+        displacementArray = slicer.util.arrayFromModelPointData(parameterNode.modelNode, "Displacement")
+        displacementArray[:] = (self.mechanicalObject.position - self.mechanicalObject.rest_position) 
+        #displacementArray *= np.array([-1, -1, 1])
+        slicer.util.arrayFromModelPointsModified(parameterNode.modelNode)
+        self.probeFilter.Update()
+        probeImage = self.probeFilter.GetOutputDataObject(0)
+        probeVTKArray = probeImage.GetPointData().GetArray("Displacement")
+        probeArray = vtk.util.numpy_support.vtk_to_numpy(probeVTKArray)
+        probeArrayShape = (self.probeDimension,self.probeDimension,self.probeDimension,3)
+        probeArray = probeArray.reshape(probeArrayShape)
+        gridArray = slicer.util.arrayFromGridTransform(self.displacementGridNode)
+        gridArray[:] = -1. * probeArray
+        slicer.util.arrayFromGridTransformModified(self.displacementGridNode)
+
+
+        #update von mises
+        stressArray = slicer.util.arrayFromModelCellData(parameterNode.modelNode, "VonMisesStress")
+        stressArray[:] = self.forceField.vonMisesPerElement.array()
+        slicer.util.arrayFromModelCellDataModified(parameterNode.modelNode, "VonMisesStress")
 
     def getParameterNode(self):
         return AirwaySimulationParameterNode(super().getParameterNode())
@@ -550,6 +546,42 @@ class AirwaySimulationLogic(SlicerSofaLogic):
             self.startup = False
             self.initialgrid = self.getParameterNode().getModelPointsArray(self.getParameterNode().modelNode)
 
+        displacementVTKArray = vtk.vtkFloatArray()
+        displacementVTKArray.SetNumberOfComponents(3)
+        displacementVTKArray.SetNumberOfTuples(modelNode.GetUnstructuredGrid().GetNumberOfPoints())
+        displacementVTKArray.SetName("Displacement")
+        modelNode.GetUnstructuredGrid().GetPointData().AddArray(displacementVTKArray)
+
+        probeGrid = vtk.vtkImageData()
+        probeGrid.SetDimensions(self.probeDimension, self.probeDimension, self.probeDimension)
+        probeGrid.AllocateScalars(vtk.VTK_DOUBLE, 1)
+        meshBounds = [0]*6
+        modelNode.GetRASBounds(meshBounds)
+        probeGrid.SetOrigin(meshBounds[0], meshBounds[2], meshBounds[4])
+        probeSize = (meshBounds[1] - meshBounds[0], meshBounds[3] - meshBounds[2], meshBounds[5] - meshBounds[4]) * 2
+        probeGrid.SetSpacing(probeSize[0]/self.probeDimension, probeSize[1]/self.probeDimension, probeSize[2]/self.probeDimension)
+
+        self.probeFilter = vtk.vtkProbeFilter()
+        self.probeFilter.SetInputData(probeGrid)
+        self.probeFilter.SetSourceData(modelNode.GetUnstructuredGrid())
+        self.probeFilter.SetPassPointArrays(True)
+        self.probeFilter.Update()
+
+        probeImage = self.probeFilter.GetOutputDataObject(0)
+        probeArray = vtk.util.numpy_support.vtk_to_numpy(probeImage.GetPointData().GetArray("Displacement"))
+        probeArray = np.reshape(probeArray, (self.probeDimension,self.probeDimension,self.probeDimension,3))
+        self.displacementGridNode = self.addGridTransformFromArray(probeArray, name="Displacement")
+        self.displacementGrid = self.displacementGridNode.GetTransformFromParent().GetDisplacementGrid()
+        # TODO: next two lines should be in ijkToRAS of grid node
+        self.displacementGrid.SetOrigin(probeImage.GetOrigin())
+        self.displacementGrid.SetSpacing(probeImage.GetSpacing())
+
+        #setup von mises
+        stressVTKArray = vtk.vtkFloatArray()
+        stressVTKArray.SetNumberOfValues(modelNode.GetUnstructuredGrid().GetNumberOfCells())
+        stressVTKArray.SetName("VonMisesStress")
+        modelNode.GetUnstructuredGrid().GetCellData().AddArray(stressVTKArray)
+
         
 
 
@@ -606,6 +638,23 @@ class AirwaySimulationLogic(SlicerSofaLogic):
 
         self.getParameterNode().boundaryROI = roiNode
 
+    def getTransformBounds(self):
+        mesh = None
+        bounds = None
+
+        if self.getParameterNode().modelNode is not None:
+            if self.getParameterNode().modelNode.GetUnstructuredGrid() is not None:
+                mesh = self.getParameterNode().modelNode.GetUnstructuredGrid()
+            elif self.getParameterNode().modelNode.GetPolyData() is not None:
+                mesh = self.getParameterNode().modelNode.GetPolyData()
+
+        if mesh is not None:
+            bounds = mesh.GetBounds()
+            center = [(bounds[0] + bounds[1])/2.0, (bounds[2] + bounds[3])/2.0, (bounds[4] + bounds[5])/2.0]
+            size = [abs(bounds[1] - bounds[0])/2.0, abs(bounds[3] - bounds[2])/2.0, abs(bounds[5] - bounds[4])/2.0]
+
+        return None
+
     def addGravityVector(self) -> None:
         # Create a new line node for the gravity vector
         gravityVector = slicer.vtkMRMLMarkupsLineNode()
@@ -648,39 +697,6 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         self.getParameterNode().gravityVector = gravityVector
 
 
-    def addFiducialToClosestPoint(self, modelNode, cameraNode) -> vtkMRMLMarkupsFiducialNode:
-        # Obtain the camera's position
-        camera = cameraNode.GetCamera()
-        camPosition = camera.GetPosition()
-
-        # Get the polydata from the model node
-        modelData = None
-
-        if self.getParameterNode().modelNode.GetUnstructuredGrid() is not None:
-            modelData = self.getParameterNode().modelNode.GetUnstructuredGrid()
-        elif self.getParameterNode().modelNode.GetPolyData() is not None:
-            modelData = self.getParameterNode().modelNode.GetPolyData()
-
-        # Set up the point locator
-        pointLocator = vtk.vtkPointLocator()
-        pointLocator.SetDataSet(modelData)
-        pointLocator.BuildLocator()
-
-        # Find the closest point on the model to the camera
-        closestPointId = pointLocator.FindClosestPoint(camPosition)
-        closestPoint = modelData.GetPoint(closestPointId)
-
-        # Create a new fiducial node
-        fiducialNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-        fiducialNode.AddControlPointWorld(vtk.vtkVector3d(closestPoint))
-
-        # Optionally, set the name and display properties
-        fiducialNode.SetName("Closest Fiducial")
-        displayNode = fiducialNode.GetDisplayNode()
-        if displayNode:
-            displayNode.SetSelectedColor(1, 0, 0)  # Red color for the selected fiducial
-
-        return fiducialNode
 
     def addRecordingSequence(self) -> None:
 
@@ -711,6 +727,30 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         if masterSequenceNode:
             sequenceNode.SetIndexName(masterSequenceNode.GetIndexName())
             sequenceNode.SetIndexUnit(masterSequenceNode.GetIndexUnit())
+
+    def addGridTransformFromArray(self, narray, name="Grid Transform"):
+        """Create a new grid transform node from content of a numpy array and add it to the scene.
+
+        Voxels values are deep-copied, therefore if the numpy array
+        is modified after calling this method, voxel values in the volume node will not change.
+        :param narray: numpy array containing grid vectors.
+        Must be [slices, rows, columns, 3]
+        :param name: grid transform node name
+        """
+        if len(narray.shape) != 4 or narray.shape[3] != 3:
+            raise RuntimeError("Need vector volume numpy array for grid transform")
+        nodeClassName = "vtkMRMLGridTransformNode"
+        gridNode = self.getParameterNode().transformationNode
+        gridNode.CreateDefaultDisplayNodes()
+        displacementGrid = gridNode.GetTransformFromParent().GetDisplacementGrid()
+        arrayShape = narray.shape
+        displacementGrid.SetDimensions(arrayShape[2], arrayShape[1], arrayShape[0])
+        scalarType = vtk.util.numpy_support.get_vtk_array_type(narray.dtype)
+        displacementGrid.AllocateScalars(scalarType, 3)
+        displacementArray = slicer.util.arrayFromGridTransform(gridNode)
+        displacementArray[:] = narray
+        slicer.util.arrayFromGridTransformModified(gridNode)
+        return gridNode
 
     
     def createScene(self, parameterNode) -> Sofa.Core.Node:
@@ -786,13 +826,15 @@ class AirwaySimulationLogic(SlicerSofaLogic):
 
         femNode.addObject('TetrahedronSetTopologyModifier', name="Modifier")
         self.femMechanicalObject = femNode.addObject('MechanicalObject', name="mstate", template="Vec3d")
-        femNode.addObject('TetrahedronFEMForceField', name="FEM", youngModulus=parameterNode.youngsModulus, poissonRatio=parameterNode.poissonRatio, method="large")
+        self.mechanicalState = femNode.getMechanicalState()
+        femNode.addObject('TetrahedronFEMForceField', name="FEM", youngModulus=parameterNode.youngsModulus, poissonRatio=parameterNode.poissonRatio, method="large", computeVonMisesStress=2)
         femNode.addObject('MeshMatrixMass', totalMass=1)
 
         breathspeed = parameterNode.breathingPeriod / 100
         breathforce = parameterNode.breathingForce / 1000
 
         self.surfacePressure = femNode.addObject('SurfacePressureForceField', pressure=breathforce, pulseMode=True, pressureSpeed=breathspeed)
+        self.forceField = femNode.getForceField(0)
         femNode.addObject('RestShapeSpringsForceField', stiffness=1, angularStiffness=1e-08)
 
         fixedROI = femNode.addChild('FixedROI')

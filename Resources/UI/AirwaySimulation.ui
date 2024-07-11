@@ -634,7 +634,14 @@
     </widget>
    </item>
    <item>
-    <widget class="qMRMLPlotWidget" name="MRMLPlotViewWidget"/>
+    <widget class="ctkVTKChartView" name="ChartView">
+     <property name="minimumSize">
+      <size>
+       <width>100</width>
+       <height>200</height>
+      </size>
+     </property>
+    </widget>
    </item>
    <item>
     <spacer name="verticalSpacer">
@@ -658,15 +665,15 @@
    <header>qMRMLNodeComboBox.h</header>
   </customwidget>
   <customwidget>
-   <class>qMRMLPlotWidget</class>
-   <extends></extends>
-   <header>qMRMLPlotWidget.h</header>
-  </customwidget>
-  <customwidget>
    <class>qMRMLWidget</class>
    <extends></extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkVTKChartView</class>
+   <extends></extends>
+   <header>ctkVTKChartView.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

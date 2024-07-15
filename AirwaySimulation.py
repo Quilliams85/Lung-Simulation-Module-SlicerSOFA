@@ -300,7 +300,7 @@ class AirwaySimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.addBoundaryROIPushButton.connect("clicked()", self.logic.addBoundaryROI)
         self.ui.addGravityVectorPushButton.connect("clicked()", self.logic.addGravityVector)
         self.ui.addRecordingSequencePushButton.connect("clicked()", self.logic.addRecordingSequence)
-
+        self.ui.SOFAMRMLModelNodeComboBox.currentNodeChanged.connect(self.logic.swapModel)
 
         self.logic.getParameterNode().conversionFactor = 1
 
@@ -428,7 +428,7 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         self.mouseInteractor = None
         self.startup = True
         self.systemForce = 0
-        self.probeDimension = 40
+        self.probeDimension = 80
 
     def updateSofa(self, parameterNode) -> None:
         if parameterNode is not None:
@@ -456,7 +456,7 @@ class AirwaySimulationLogic(SlicerSofaLogic):
 
         #Update Grid Transform
         displacementArray = slicer.util.arrayFromModelPointData(parameterNode.modelNode, "Displacement")
-        displacementArray[:] = (self.mechanicalObject.position - self.mechanicalObject.rest_position) 
+        displacementArray[:] = (self.mechanicalObject.position - np.array(self.initialgrid)) 
         #displacementArray *= np.array([-1, -1, 1])
         slicer.util.arrayFromModelPointsModified(parameterNode.modelNode)
         self.probeFilter.Update()
@@ -541,46 +541,47 @@ class AirwaySimulationLogic(SlicerSofaLogic):
             browserNode.SetRecordingActive(True)
             
 
-        #if it's the first time running simulation, save the initial mesh points for reset
+        #if it's the first time running simulation, save the initial mesh points for reset, and setup displacement transform
         if self.startup:
             self.startup = False
             self.initialgrid = self.getParameterNode().getModelPointsArray(self.getParameterNode().modelNode)
+            print('intial grid saved')
 
-        displacementVTKArray = vtk.vtkFloatArray()
-        displacementVTKArray.SetNumberOfComponents(3)
-        displacementVTKArray.SetNumberOfTuples(modelNode.GetUnstructuredGrid().GetNumberOfPoints())
-        displacementVTKArray.SetName("Displacement")
-        modelNode.GetUnstructuredGrid().GetPointData().AddArray(displacementVTKArray)
+            displacementVTKArray = vtk.vtkFloatArray()
+            displacementVTKArray.SetNumberOfComponents(3)
+            displacementVTKArray.SetNumberOfTuples(modelNode.GetUnstructuredGrid().GetNumberOfPoints())
+            displacementVTKArray.SetName("Displacement")
+            modelNode.GetUnstructuredGrid().GetPointData().AddArray(displacementVTKArray)
 
-        probeGrid = vtk.vtkImageData()
-        probeGrid.SetDimensions(self.probeDimension, self.probeDimension, self.probeDimension)
-        probeGrid.AllocateScalars(vtk.VTK_DOUBLE, 1)
-        meshBounds = [0]*6
-        modelNode.GetRASBounds(meshBounds)
-        probeGrid.SetOrigin(meshBounds[0], meshBounds[2], meshBounds[4])
-        probeSize = (meshBounds[1] - meshBounds[0], meshBounds[3] - meshBounds[2], meshBounds[5] - meshBounds[4]) * 2
-        probeGrid.SetSpacing(probeSize[0]/self.probeDimension, probeSize[1]/self.probeDimension, probeSize[2]/self.probeDimension)
+            probeGrid = vtk.vtkImageData()
+            probeGrid.SetDimensions(self.probeDimension, self.probeDimension, self.probeDimension)
+            probeGrid.AllocateScalars(vtk.VTK_DOUBLE, 1)
+            meshBounds = [0]*6
+            modelNode.GetRASBounds(meshBounds)
+            probeGrid.SetOrigin(meshBounds[0], meshBounds[2], meshBounds[4])
+            probeSize = (meshBounds[1] - meshBounds[0], meshBounds[3] - meshBounds[2], meshBounds[5] - meshBounds[4]) * 2
+            probeGrid.SetSpacing(probeSize[0]/self.probeDimension, probeSize[1]/self.probeDimension, probeSize[2]/self.probeDimension)
 
-        self.probeFilter = vtk.vtkProbeFilter()
-        self.probeFilter.SetInputData(probeGrid)
-        self.probeFilter.SetSourceData(modelNode.GetUnstructuredGrid())
-        self.probeFilter.SetPassPointArrays(True)
-        self.probeFilter.Update()
+            self.probeFilter = vtk.vtkProbeFilter()
+            self.probeFilter.SetInputData(probeGrid)
+            self.probeFilter.SetSourceData(modelNode.GetUnstructuredGrid())
+            self.probeFilter.SetPassPointArrays(True)
+            self.probeFilter.Update()
 
-        probeImage = self.probeFilter.GetOutputDataObject(0)
-        probeArray = vtk.util.numpy_support.vtk_to_numpy(probeImage.GetPointData().GetArray("Displacement"))
-        probeArray = np.reshape(probeArray, (self.probeDimension,self.probeDimension,self.probeDimension,3))
-        self.displacementGridNode = self.addGridTransformFromArray(probeArray, name="Displacement")
-        self.displacementGrid = self.displacementGridNode.GetTransformFromParent().GetDisplacementGrid()
-        # TODO: next two lines should be in ijkToRAS of grid node
-        self.displacementGrid.SetOrigin(probeImage.GetOrigin())
-        self.displacementGrid.SetSpacing(probeImage.GetSpacing())
+            probeImage = self.probeFilter.GetOutputDataObject(0)
+            probeArray = vtk.util.numpy_support.vtk_to_numpy(probeImage.GetPointData().GetArray("Displacement"))
+            probeArray = np.reshape(probeArray, (self.probeDimension,self.probeDimension,self.probeDimension,3))
+            self.displacementGridNode = self.addGridTransformFromArray(probeArray, name="Displacement")
+            self.displacementGrid = self.displacementGridNode.GetTransformFromParent().GetDisplacementGrid()
+            # TODO: next two lines should be in ijkToRAS of grid node
+            self.displacementGrid.SetOrigin(probeImage.GetOrigin())
+            self.displacementGrid.SetSpacing(probeImage.GetSpacing())
 
-        #setup von mises
-        stressVTKArray = vtk.vtkFloatArray()
-        stressVTKArray.SetNumberOfValues(modelNode.GetUnstructuredGrid().GetNumberOfCells())
-        stressVTKArray.SetName("VonMisesStress")
-        modelNode.GetUnstructuredGrid().GetCellData().AddArray(stressVTKArray)
+            #setup von mises
+            stressVTKArray = vtk.vtkFloatArray()
+            stressVTKArray.SetNumberOfValues(modelNode.GetUnstructuredGrid().GetNumberOfCells())
+            stressVTKArray.SetName("VonMisesStress")
+            modelNode.GetUnstructuredGrid().GetCellData().AddArray(stressVTKArray)
 
         
 
@@ -611,12 +612,20 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         self.createScene(self.getParameterNode())
     
 
-
     def onModelNodeModified(self, caller, event) -> None:
         if self.getParameterNode().modelNode.GetUnstructuredGrid() is not None:
             self.getParameterNode().modelNode.GetUnstructuredGrid().SetPoints(caller.GetPolyData().GetPoints())
         elif self.getParameterNode().modelNode.GetPolyData() is not None:
             self.getParameterNode().modelNode.GetPolyData().SetPoints(caller.GetPolyData().GetPoints())
+
+    def swapModel(self):
+        print("model Swapped")
+        self.getParameterNode().modelNode.GetDisplayNode().SetVisibility(True)
+        self.initialgrid = self.getParameterNode().getModelPointsArray(self.getParameterNode().modelNode)
+        self.resetSimulation()
+
+
+
 
     def addBoundaryROI(self) -> None:
         roiNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsROINode")
@@ -831,7 +840,7 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         femNode.addObject('MeshMatrixMass', totalMass=1)
 
         breathspeed = parameterNode.breathingPeriod / 100
-        breathforce = parameterNode.breathingForce / 1000
+        breathforce = parameterNode.breathingForce / 500
 
         self.surfacePressure = femNode.addObject('SurfacePressureForceField', pressure=breathforce, pulseMode=True, pressureSpeed=breathspeed)
         self.forceField = femNode.getForceField(0)

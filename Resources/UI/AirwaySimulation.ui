@@ -19,10 +19,13 @@
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <layout class="QFormLayout" name="formLayout_2">
+     <property name="horizontalSpacing">
+      <number>20</number>
+     </property>
      <item row="0" column="0">
       <widget class="QLabel" name="simulationModelNodeLabel">
        <property name="text">
-        <string>Model Node:</string>
+        <string>Surface Node:</string>
        </property>
       </widget>
      </item>
@@ -88,11 +91,94 @@
      <item row="1" column="0">
       <widget class="QLabel" name="label_4">
        <property name="text">
-        <string>Ribs Node:</string>
+        <string>Lobes:</string>
        </property>
       </widget>
      </item>
      <item row="1" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout_8">
+       <item>
+        <widget class="QLabel" name="label_8">
+         <property name="text">
+          <string>L:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="qMRMLNodeComboBox" name="MRMLNodeComboBox">
+         <property name="nodeTypes">
+          <stringlist notr="true"/>
+         </property>
+         <property name="hideChildNodeTypes">
+          <stringlist notr="true"/>
+         </property>
+         <property name="interactionNodeSingletonTag">
+          <string notr="true"/>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_10">
+         <property name="text">
+          <string>R:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="qMRMLNodeComboBox" name="MRMLNodeComboBox_2">
+         <property name="nodeTypes">
+          <stringlist notr="true"/>
+         </property>
+         <property name="hideChildNodeTypes">
+          <stringlist notr="true"/>
+         </property>
+         <property name="interactionNodeSingletonTag">
+          <string notr="true"/>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer_3">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Fixed</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>31</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </item>
+     <item row="2" column="1">
+      <spacer name="verticalSpacer_4">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <property name="sizeType">
+        <enum>QSizePolicy::MinimumExpanding</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item row="3" column="0">
+      <widget class="QLabel" name="ribsLabel">
+       <property name="text">
+        <string>Ribs Node:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="1">
       <layout class="QHBoxLayout" name="horizontalLayout_11">
        <item>
         <widget class="qMRMLNodeComboBox" name="movingPointComboBox">
@@ -136,14 +222,134 @@
        </item>
       </layout>
      </item>
-     <item row="3" column="0">
+     <item row="6" column="0">
+      <widget class="QLabel" name="airwayLabel">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>80</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Airway Node:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="6" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout_16">
+       <item>
+        <widget class="qMRMLNodeComboBox" name="airwayNodeComboBox">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="nodeTypes">
+          <stringlist notr="true"/>
+         </property>
+         <property name="hideChildNodeTypes">
+          <stringlist notr="true"/>
+         </property>
+         <property name="interactionNodeSingletonTag">
+          <string notr="true"/>
+         </property>
+         <property name="SlicerParameterName" stdset="0">
+          <string>airwayNode</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer_5">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Fixed</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>31</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </item>
+     <item row="8" column="0">
+      <widget class="QLabel" name="transformLabel">
+       <property name="text">
+        <string>Transform Node:</string>
+       </property>
+      </widget>
+     </item>
+     <item row="8" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout_14">
+       <item>
+        <widget class="qMRMLNodeComboBox" name="TransformationNodeComboBox">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="nodeTypes">
+          <stringlist notr="true"/>
+         </property>
+         <property name="hideChildNodeTypes">
+          <stringlist notr="true"/>
+         </property>
+         <property name="interactionNodeSingletonTag">
+          <string notr="true"/>
+         </property>
+         <property name="SlicerParameterName" stdset="0">
+          <string>transformationNode</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer_4">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Fixed</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>31</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </item>
+     <item row="9" column="1">
+      <spacer name="verticalSpacer_5">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <property name="sizeType">
+        <enum>QSizePolicy::MinimumExpanding</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item row="10" column="0">
       <widget class="QLabel" name="boundaryROILabel">
        <property name="text">
         <string>Boundary ROI:</string>
        </property>
       </widget>
      </item>
-     <item row="3" column="1">
+     <item row="10" column="1">
       <layout class="QHBoxLayout" name="horizontalLayout">
        <item>
         <widget class="qMRMLNodeComboBox" name="boundaryROIComboBox">
@@ -196,14 +402,14 @@
        </item>
       </layout>
      </item>
-     <item row="4" column="0">
+     <item row="11" column="0">
       <widget class="QLabel" name="gravityVectorLabel">
        <property name="text">
         <string>Gravity Vector:</string>
        </property>
       </widget>
      </item>
-     <item row="4" column="1">
+     <item row="11" column="1">
       <layout class="QHBoxLayout" name="horizontalLayout_2">
        <item>
         <widget class="qMRMLNodeComboBox" name="gravityVectorComboBox">
@@ -272,14 +478,14 @@
        </item>
       </layout>
      </item>
-     <item row="5" column="0">
+     <item row="12" column="0">
       <widget class="QLabel" name="recordingSequenceLabel">
        <property name="text">
         <string>Rec. Sequence:</string>
        </property>
       </widget>
      </item>
-     <item row="5" column="1">
+     <item row="12" column="1">
       <layout class="QHBoxLayout" name="horizontalLayout_3">
        <item>
         <widget class="qMRMLNodeComboBox" name="recordingSequenceComboBox">
@@ -329,36 +535,6 @@
        </item>
       </layout>
      </item>
-     <item row="2" column="0">
-      <layout class="QHBoxLayout" name="horizontalLayout_14">
-       <item>
-        <widget class="QLabel" name="label_8">
-         <property name="text">
-          <string>Transformation</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </item>
-     <item row="2" column="1">
-      <widget class="qMRMLNodeComboBox" name="TransformationNodeComboBox">
-       <property name="enabled">
-        <bool>true</bool>
-       </property>
-       <property name="nodeTypes">
-        <stringlist notr="true"/>
-       </property>
-       <property name="hideChildNodeTypes">
-        <stringlist notr="true"/>
-       </property>
-       <property name="interactionNodeSingletonTag">
-        <string notr="true"/>
-       </property>
-       <property name="SlicerParameterName" stdset="0">
-        <string>transformationNode</string>
-       </property>
-      </widget>
-     </item>
     </layout>
    </item>
    <item>
@@ -366,7 +542,7 @@
      <item>
       <widget class="QPushButton" name="startSimulationPushButton">
        <property name="enabled">
-        <bool>false</bool>
+        <bool>true</bool>
        </property>
        <property name="text">
         <string>Start Simulation</string>
@@ -376,7 +552,7 @@
      <item>
       <widget class="QPushButton" name="stopSimulationPushButton">
        <property name="enabled">
-        <bool>false</bool>
+        <bool>true</bool>
        </property>
        <property name="text">
         <string>Stop Simulation</string>
@@ -441,6 +617,12 @@
        </item>
        <item>
         <widget class="QSpinBox" name="currentStepSpinBox">
+         <property name="maximumSize">
+          <size>
+           <width>70</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="maximum">
           <number>999999999</number>
          </property>
@@ -465,6 +647,12 @@
        </item>
        <item row="0" column="1">
         <widget class="QSpinBox" name="totalStepsSpinBox">
+         <property name="maximumSize">
+          <size>
+           <width>70</width>
+           <height>16777215</height>
+          </size>
+         </property>
          <property name="minimum">
           <number>-1</number>
          </property>
@@ -482,6 +670,19 @@
       </layout>
      </item>
     </layout>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="realTimeCheckBox">
+     <property name="layoutDirection">
+      <enum>Qt::LeftToRight</enum>
+     </property>
+     <property name="text">
+      <string>Real-Time</string>
+     </property>
+     <property name="checked">
+      <bool>false</bool>
+     </property>
+    </widget>
    </item>
    <item>
     <spacer name="verticalSpacer_3">
@@ -516,20 +717,14 @@
      <item>
       <widget class="QLabel" name="label">
        <property name="text">
-        <string>Breathing Speed</string>
+        <string>Breathing Speed(BPM)</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QSlider" name="breathingPeriodSlider">
-       <property name="maximum">
-        <number>99</number>
-       </property>
+      <widget class="QDoubleSpinBox" name="breathingSpeedSpinBox">
        <property name="value">
-        <number>15</number>
-       </property>
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
+        <double>18.000000000000000</double>
        </property>
       </widget>
      </item>
@@ -545,12 +740,9 @@
       </widget>
      </item>
      <item>
-      <widget class="QSlider" name="breathingForceSlider">
+      <widget class="QDoubleSpinBox" name="breathingForceSpinBox">
        <property name="value">
-        <number>15</number>
-       </property>
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
+        <double>0.500000000000000</double>
        </property>
       </widget>
      </item>
@@ -645,6 +837,64 @@
     </layout>
    </item>
    <item>
+    <spacer name="verticalSpacer_6">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeType">
+      <enum>QSizePolicy::Fixed</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>10</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QLabel" name="label_11">
+     <property name="font">
+      <font>
+       <pointsize>14</pointsize>
+      </font>
+     </property>
+     <property name="text">
+      <string>Validation</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_17">
+     <item>
+      <widget class="QLabel" name="label_12">
+       <property name="text">
+        <string>Fiducial Point: </string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="qMRMLNodeComboBox" name="pointNodeComboBox">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="nodeTypes">
+        <stringlist notr="true"/>
+       </property>
+       <property name="hideChildNodeTypes">
+        <stringlist notr="true"/>
+       </property>
+       <property name="interactionNodeSingletonTag">
+        <string notr="true"/>
+       </property>
+       <property name="SlicerParameterName" stdset="0">
+        <string>pointNode</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
     <spacer name="verticalSpacer">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
@@ -662,12 +912,12 @@
  <customwidgets>
   <customwidget>
    <class>qMRMLNodeComboBox</class>
-   <extends></extends>
+   <extends>QWidget</extends>
    <header>qMRMLNodeComboBox.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
-   <extends></extends>
+   <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
   </customwidget>
@@ -767,6 +1017,38 @@
     <hint type="destinationlabel">
      <x>320</x>
      <y>93</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>SoftTissueSimulation</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>airwayNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>264</x>
+     <y>500</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>294</x>
+     <y>94</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>SoftTissueSimulation</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>pointNodeComboBox</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>264</x>
+     <y>500</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>316</x>
+     <y>794</y>
     </hint>
    </hints>
   </connection>

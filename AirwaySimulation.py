@@ -148,7 +148,8 @@ class AirwaySimulationParameterNode:
     conversionFactor: int
     poissonRatio: float
     youngsModulus: float
-
+    airwayNode: vtkMRMLModelNode
+    pointNode: vtkMRMLMarkupsFiducialNode
     def getBoundaryROI(self):
 
         if self.boundaryROI is None:
@@ -198,6 +199,24 @@ class AirwaySimulationParameterNode:
                 a *= 1.0
             vertices.append(p)
         return vertices
+    
+    def getTrianglesArray(self, targetNode):
+        # Get the polydata from the model node
+        polydata = targetNode.GetPolyData()
+
+        # Extract the triangles
+        triangles = []
+        cells = polydata.GetPolys()
+        cells.InitTraversal()
+
+        idList = vtk.vtkIdList()
+        while cells.GetNextCell(idList):
+            if idList.GetNumberOfIds() == 3:  # Ensure it's a triangle
+                triangle = [idList.GetId(0), idList.GetId(1), idList.GetId(2)]
+                triangles.append(triangle)
+
+        return triangles
+
 
 
     def getModelPointsArray(self, targetNode):
@@ -300,12 +319,13 @@ class AirwaySimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.addBoundaryROIPushButton.connect("clicked()", self.logic.addBoundaryROI)
         self.ui.addGravityVectorPushButton.connect("clicked()", self.logic.addGravityVector)
         self.ui.addRecordingSequencePushButton.connect("clicked()", self.logic.addRecordingSequence)
-        self.ui.SOFAMRMLModelNodeComboBox.currentNodeChanged.connect(self.logic.swapModel)
+        #self.ui.SOFAMRMLModelNodeComboBox.currentNodeChanged.connect(self.logic.swapModel)
+        self.ui.realTimeCheckBox.connect("clicked()", self.setRealTime)
 
         self.logic.getParameterNode().conversionFactor = 1
 
         self.initializeParameterNode()
-        self.logic.getParameterNode().AddObserver(vtk.vtkCommand.ModifiedEvent, self.updateSimulationGUI)
+        #self.logic.getParameterNode().AddObserver(vtk.vtkCommand.ModifiedEvent, self.updateSimulationGUI)
 
 
 
@@ -374,26 +394,33 @@ class AirwaySimulationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.logic.dt = self.ui.dtSpinBox.value
         self.logic._totalSteps = self.ui.totalStepsSpinBox.value
         self.logic.currentStep = self.ui.currentStepSpinBox.value
-        self.parameterNode.breathingPeriod = self.ui.breathingPeriodSlider.value
-        self.parameterNode.breathingForce = self.ui.breathingForceSlider.value
+        self.parameterNode.breathingPeriod = self.ui.breathingSpeedSpinBox.value
+        self.parameterNode.breathingForce = self.ui.breathingForceSpinBox.value
         self.parameterNode.poissonRatio = self.ui.poissonRatioSpinBox.value
         self.parameterNode.youngsModulus = self.ui.youngsModulusSpinBox.value
         self.logic.startSimulation()
-        self.timer.start(0) #This timer drives the simulation updates
+        self.logic.last_time = time.time()
+        self.timer.start(100) #This timer drives the simulation updates
 
     def stopSimulation(self):
         self.timer.stop()
         self.logic.stopSimulation()
 
     def resetSimulation(self):
-            self.timer.stop()
-            self.ui.currentStepSpinBox.value = 0
-            self.logic.resetSimulation()
+        self.timer.stop()
+        self.ui.currentStepSpinBox.value = 0
+        self.logic.resetSimulation()
+
+    def setRealTime(self):
+        self.logic.rt_toggle = self.ui.realTimeCheckBox.isChecked()
+        print(self.ui.realTimeCheckBox.isChecked())
 
     def simulationStep(self):
-       self.logic.simulationStep(self.parameterNode)
-       self.ui.currentStepSpinBox.value += 1
-       self.ui.systemForceBar.value = self.logic.systemForce
+
+        self.logic.simulationStep(self.parameterNode)
+        self.ui.currentStepSpinBox.value += 1
+        
+        self.ui.systemForceBar.value = int(self.logic.systemForce)
 
 
 #
@@ -429,6 +456,9 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         self.startup = True
         self.systemForce = 0
         self.probeDimension = 80
+        self.startTime = time.time()
+        self.times = []
+        self.volumes = []
 
     def updateSofa(self, parameterNode) -> None:
         if parameterNode is not None:
@@ -444,21 +474,12 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         vtk_points.SetData(points_vtk)
         parameterNode.modelNode.GetUnstructuredGrid().SetPoints(vtk_points)
 
-        #pass back ribs mesh
-        points_vtk1 = numpy_to_vtk(num_array = self.ribsMO.position.array(), deep=True, array_type=vtk.VTK_FLOAT)
-        vtk_points1 = vtk.vtkPoints()
-        vtk_points1.SetData(points_vtk1)
-        parameterNode.ribsModelNode.GetPolyData().SetPoints(vtk_points1)
-
 
         self.systemForce = np.linalg.norm(self.femMechanicalObject.force.value)
-
-
+ 
         #Update Grid Transform
         displacementArray = slicer.util.arrayFromModelPointData(parameterNode.modelNode, "Displacement")
-        displacementArray[:] = (self.mechanicalObject.position - np.array(self.initialgrid)) 
-        #displacementArray *= np.array([-1, -1, 1])
-        slicer.util.arrayFromModelPointsModified(parameterNode.modelNode)
+        displacementArray[:] = (self.mechanicalObject.position - self.lastPosition)
         self.probeFilter.Update()
         probeImage = self.probeFilter.GetOutputDataObject(0)
         probeVTKArray = probeImage.GetPointData().GetArray("Displacement")
@@ -475,20 +496,39 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         stressArray[:] = self.forceField.vonMisesPerElement.array()
         slicer.util.arrayFromModelCellDataModified(parameterNode.modelNode, "VonMisesStress")
 
+
+        #apply transform to markups if using
+        if self.getParameterNode().pointNode != None:
+            self.getParameterNode().pointNode.SetAndObserveTransformNodeID(self.getParameterNode().transformationNode.GetID())
+            slicer.vtkSlicerTransformLogic().hardenTransform(self.getParameterNode().pointNode)
+
+        #apply transform to airways
+        self.getParameterNode().airwayNode.SetAndObserveTransformNodeID(self.getParameterNode().transformationNode.GetID())
+        slicer.vtkSlicerTransformLogic().hardenTransform(self.getParameterNode().airwayNode)
+        self.lastPosition[:] = self.mechanicalObject.position[:]
+
+        self.geo_filter.Update()
+        self.massProp.Update()
+        self.times.append(time.time() - self.startTime)
+        self.volumes.append(self.massProp.GetVolume())
+
+        #update breathing
+        self.surfacePressure.value = np.array([self.lungPressure(self.getParameterNode().breathingForce, self.getParameterNode().breathingPeriod)])
+        self.surfVol.append(self.lungPressure(self.getParameterNode().breathingForce, self.getParameterNode().breathingPeriod))
+
+
     def getParameterNode(self):
         return AirwaySimulationParameterNode(super().getParameterNode())
 
     def resetParameterNode(self):
         if self.getParameterNode():
-            self.getParameterNode().modelNode = None
-            self.getParameterNode().ribsModelNode = None
-            self.getParameterNode().boundaryROI = None
             self.getParameterNode().gravityVector = None
             self.getParameterNode().sequenceNode = None
             self.getParameterNode().sequenceBrowserNode = None
             self.getParameterNode().dt = 0.01
             self.getParameterNode().currentStep = 0
             self.getParameterNode().totalSteps = -1
+    
 
     def getSimulationController(self):
         return self.simulationController
@@ -496,6 +536,11 @@ class AirwaySimulationLogic(SlicerSofaLogic):
     def getTransformation(self, currentgrid):
         init_points = np.array(self.initialgrid)
         return currentgrid - init_points
+    
+    def lungPressure(self, amplitude, bpm):
+        amplitude /= 1000
+        return (amplitude/2) * -1 * np.cos(2 * np.pi * (bpm/60) * time.time()) + (amplitude/2)
+
     
     def numpy_to_vtkImageData(self, np_array):
         # Ensure the numpy array is contiguous
@@ -545,8 +590,20 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         if self.startup:
             self.startup = False
             self.initialgrid = self.getParameterNode().getModelPointsArray(self.getParameterNode().modelNode)
+            self.airwayInitial = self.getParameterNode().getSurfacePointsArray(self.getParameterNode().airwayNode)
             print('intial grid saved')
 
+            #save fiducials
+            if self.getParameterNode().pointNode != None:
+                self.initialPoints = []
+                for i in range(self.getParameterNode().pointNode.GetNumberOfFiducials()):
+                    coords = [0.0, 0.0, 0.0]
+                    self.getParameterNode().pointNode.GetNthControlPointPosition(i, coords)
+                    self.initialPoints.append(coords)
+
+
+            #setup displacement stuff
+            self.lastPosition = np.array(self.initialgrid)
             displacementVTKArray = vtk.vtkFloatArray()
             displacementVTKArray.SetNumberOfComponents(3)
             displacementVTKArray.SetNumberOfTuples(modelNode.GetUnstructuredGrid().GetNumberOfPoints())
@@ -583,14 +640,34 @@ class AirwaySimulationLogic(SlicerSofaLogic):
             stressVTKArray.SetName("VonMisesStress")
             modelNode.GetUnstructuredGrid().GetCellData().AddArray(stressVTKArray)
 
-        
-
-
         super().startSimulation(self.getParameterNode())
+        self.startTime = time.time()
+        self.times = []
+        self.volumes = []
+        self.surfVol = []
+        self.geo_filter = vtk.vtkGeometryFilter()
+        self.geo_filter.SetInputData(self.getParameterNode().modelNode.GetUnstructuredGrid())
+        self.geo_filter.Update()
+        self.massProp = vtk.vtkMassProperties()
+        self.massProp.SetInputData(self.geo_filter.GetOutput())
+        self.massProp.Update()
+        print(self.massProp.GetVolume())
         self._simulationRunning = True
         self.getParameterNode().Modified()
 
     def stopSimulation(self) -> None:
+        with open("/home/snr/Documents/SNR Lab/Case 2 Lung validation Data/Slicer Scene/output.txt", "w") as file:
+            for a in range(len(self.times)):
+                time = str(self.times[a])
+                file.write(time)
+                file.write(',')
+                vol = str(self.volumes[a]/1000000)
+                file.write(vol)
+                file.write(',')
+                vol = str(self.surfVol[a]*1000)
+                file.write(vol)
+                file.write(','+'\n')
+
         super().stopSimulation()
         self._simulationRunning = False
         browserNode = self.getParameterNode().sequenceBrowserNode
@@ -606,6 +683,23 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         vtk_points = vtk.vtkPoints()
         vtk_points.SetData(points_vtk)
         self.getParameterNode().modelNode.GetUnstructuredGrid().SetPoints(vtk_points)
+
+
+        points_vtk = numpy_to_vtk(num_array=self.airwayInitial, deep=True, array_type=vtk.VTK_FLOAT)
+        vtk_points = vtk.vtkPoints()
+        vtk_points.SetData(points_vtk)
+        self.getParameterNode().airwayNode.GetPolyData().SetPoints(vtk_points)
+
+        if self.getParameterNode().pointNode != None:
+            i=0
+            for coords in self.initialPoints:
+                self.getParameterNode().pointNode.RemoveAllControlPoints()
+            for coords in self.initialPoints:
+                self.getParameterNode().pointNode.AddControlPoint(coords[0], coords[1], coords[2])
+                self.getParameterNode().pointNode.SetNthControlPointLabel(i, str(i+1))
+                i+=1
+
+        self.lastPosition[:] = self.initialgrid[:]
         #reset simulation
         self.stopSimulation()
         self.clean()
@@ -808,7 +902,8 @@ class AirwaySimulationLogic(SlicerSofaLogic):
             "Sofa.Component.Constraint.Projective",
             "SofaIGTLink",
             "Sofa.Component.Mapping.NonLinear",
-            'Sofa.Component.Topology.Container.Constant'
+            'Sofa.Component.Topology.Container.Constant',
+            'SoftRobots'
 
         ])
 
@@ -832,19 +927,14 @@ class AirwaySimulationLogic(SlicerSofaLogic):
         self.container.tetrahedra = parameterNode.getModelCellsArray()
 
 
-
         femNode.addObject('TetrahedronSetTopologyModifier', name="Modifier")
         self.femMechanicalObject = femNode.addObject('MechanicalObject', name="mstate", template="Vec3d")
         self.mechanicalState = femNode.getMechanicalState()
         femNode.addObject('TetrahedronFEMForceField', name="FEM", youngModulus=parameterNode.youngsModulus, poissonRatio=parameterNode.poissonRatio, method="large", computeVonMisesStress=2)
         femNode.addObject('MeshMatrixMass', totalMass=1)
 
-        breathspeed = parameterNode.breathingPeriod / 100
-        breathforce = parameterNode.breathingForce / 500
-
-        self.surfacePressure = femNode.addObject('SurfacePressureForceField', pressure=breathforce, pulseMode=True, pressureSpeed=breathspeed)
         self.forceField = femNode.getForceField(0)
-        femNode.addObject('RestShapeSpringsForceField', stiffness=1, angularStiffness=1e-08)
+
 
         fixedROI = femNode.addChild('FixedROI')
         self.BoxROI = fixedROI.addObject('BoxROI', template="Vec3", box=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], drawBoxes=False,
@@ -852,6 +942,20 @@ class AirwaySimulationLogic(SlicerSofaLogic):
                                           computeTriangles=False, computeTetrahedra=False, computeEdges=False)
         fixedROI.addObject('FixedConstraint', indices="@FixedROI.indices")
 
+
+
+        #Lung Inflation with Surface Pressure Constraint
+        cavity = femNode.addChild('cavity')
+        lobe = slicer.util.getNode('total_lobe')
+        cavity_container = cavity.addObject('TriangleSetTopologyContainer', name="triangleContainer")
+        cavity_container.position = parameterNode.getSurfacePointsArray(lobe)
+        cavity_container.triangles = parameterNode.getTrianglesArray(lobe)
+        cavity.addObject('MechanicalObject', name='cavity')
+        self.surfacePressure = cavity.addObject('SurfacePressureConstraint', triangles='triangleContainer', value=0, valueType=0)
+        cavity.addObject('BarycentricMapping', name='mapping', mapForces=False, mapMasses=False)
+
+
+        #collision for lung surface
         collisionNode = femNode.addChild('Collision')
         collisionNode.addObject('TriangleSetTopologyContainer', name="Container")
         collisionNode.addObject('TriangleSetTopologyModifier', name="Modifier")
